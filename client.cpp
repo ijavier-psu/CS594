@@ -9,6 +9,8 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
+#include "database.h"
+
 constexpr uint32_t MAX_PAYLOAD_SIZE = 4096;
 
 #pragma pack(push, 1)
@@ -170,22 +172,14 @@ void receive_thread(int sock) {
 }
 
 int main() {
-    int sock =
-        socket(AF_INET,
-               SOCK_STREAM,
-               0);
+    int port = 1356;
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
 
     sockaddr_in server_addr {};
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
 
-    server_addr.sin_family =
-        AF_INET;
-
-    server_addr.sin_port =
-        htons(8080);
-
-    inet_pton(AF_INET,
-              "127.0.0.1",
-              &server_addr.sin_addr);
+    inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
 
     if (connect(sock,
                 (sockaddr*)&server_addr,
@@ -194,11 +188,11 @@ int main() {
         return 1;
     }
 
-    std::thread receiver(
-        receive_thread,
-        sock
-    );
+    //setup listening thread
+    std::thread receiver(receive_thread, sock);
 
+    //Client UI loop
+    //FIXME
     while (true) {
         std::cout << "> ";
 
@@ -219,9 +213,10 @@ int main() {
         }
 
         uint32_t opcode =
-            std::stoul(
-                line.substr(0, pos)
-            );
+            opcodes["ERR"];
+            //std::stoul(
+            //    line.substr(0, pos)
+            //);
 
         std::string message =
             line.substr(pos + 1);

@@ -1,18 +1,10 @@
-#include <iostream>
-#include <thread>
-#include <vector>
-#include <mutex>
-#include <algorithm>
-#include <cstring>
-#include <cstdint>
 
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sqlite3.h>
+#include "server.h"
+#include "database.h"
 
-std::mutex db_mutex;
+//std::mutex db_mutex;
 
+//FIXME
 constexpr uint32_t MAX_PAYLOAD_SIZE = 4096;
 
 #pragma pack(push, 1)
@@ -30,6 +22,19 @@ struct irc_packet {
 std::vector<int> clients;
 std::mutex clients_mutex;
 
+
+    /*
+opcodes["ERR"] = 	0x10000001U;
+opcodes["CONN_INIT"] = 0x10000002U;
+opcodes["CONN_ACCEPT"] = 0x10000003U;
+opcodes["KEEPALIVE"] = 0x10000004U;
+opcodes["LIST_ROOMS"] = 0x10000005U;
+opcodes["LIST_ROOMS_RESP"] = 0x10000006U;
+opcodes["JOIN_ROOM"] = 0x10000007U;
+opcodes["LEAVE_ROOM"] = 0x10000008U;
+opcodes["SEND_MSG"] = 0x10000009U;
+opcodes["RELAY_MSG"] = 0x1000000AU;
+*/
 
 bool recv_packet(int sock, irc_packet& packet) {
     irc_pkt_header net_header;
@@ -147,10 +152,7 @@ bool send_packet(int sock, const irc_packet& packet) {
     */
 }
 
-void broadcast_packet(
-    const irc_packet& packet,
-    int sender_socket
-) {
+void broadcast_packet(const irc_packet& packet, int sender_socket) {
     std::lock_guard<std::mutex> lock(
         clients_mutex
     );
@@ -162,11 +164,9 @@ void broadcast_packet(
     }
 }
 
-void handle_client(
-    int client_socket,
-    sockaddr_in client_addr
-) {
+void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
     char ip[INET_ADDRSTRLEN];
+    uint16_t user_id = 0;
 
     inet_ntop(AF_INET,
               &client_addr.sin_addr,
@@ -179,6 +179,8 @@ void handle_client(
     std::cout << "Connected: "
               << ip << ":" << port
               << std::endl;
+
+    read_data(db,56);
 
     while (true) {
         irc_packet packet;
@@ -227,25 +229,11 @@ void handle_client(
     std::cout << "Client disconnected\n";
 }
 
-bool execute_sql(sqlite3* db, const std::string& sql)
-{
-    char* errMsg = nullptr;
-
-    int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg);
-
-    if (rc != SQLITE_OK)
-    {
-        std::cerr << "SQL Error: " << errMsg << std::endl;
-        sqlite3_free(errMsg);
-        return false;
-    }
-
-    return true;
-}
 
 int main() {
     // Set up database
     sqlite3* db;
+    int port = 1356;
 
     int rc = sqlite3_open("example.db", &db);
 
@@ -263,7 +251,7 @@ int main() {
 
     std::string create_table_sql =
     "CREATE TABLE IF NOT EXISTS users ("
-    "user_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "user_id INTEGER PRIMARY KEY AUTOINCREMENT, thread_id INTEGER"
     ");";
 
     if (!execute_sql(db, create_table_sql))
@@ -273,13 +261,8 @@ int main() {
     }
 
 
-
-
     //Start Socket
-    int server_socket =
-        socket(AF_INET,
-               SOCK_STREAM,
-               0);
+    int server_socket = socket(AF_INET, SOCK_STREAM, 0);
 
     if (server_socket < 0) {
         perror("socket");
@@ -287,21 +270,12 @@ int main() {
     }
 
     int opt = 1;
-
-    setsockopt(server_socket,
-               SOL_SOCKET,
-               SO_REUSEADDR,
-               &opt,
-               sizeof(opt));
+    setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     sockaddr_in server_addr {};
-
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr =
-        INADDR_ANY;
-
-    server_addr.sin_port =
-        htons(8080);
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(port);
 
     if (bind(server_socket,
              (sockaddr*)&server_addr,
@@ -316,7 +290,7 @@ int main() {
         return 1;
     }
 
-    std::cout << "Listening on 8080\n";
+    std::cout << "Listening on "<< port <<"\n";
 
     while (true) {
         sockaddr_in client_addr {};
@@ -341,10 +315,6 @@ int main() {
             clients.push_back(client_socket);
         }
 
-        std::thread(
-            handle_client,
-            client_socket,
-            client_addr
-        ).detach();
+        std::thread(handle_client,client_socket,client_addr,db).detach();
     }
 }
