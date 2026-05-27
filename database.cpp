@@ -3,9 +3,56 @@
 
 std::mutex db_mutex;
 
-std::unordered_map<std::string, uint32_t> opcodes{
-    {"ERR", 0x10000001U}
+/*enum opcodes {
+    ERR,
+    CONN_INIT,
+    CONN_ACCEPT,
+    KEEPALIVE,
+    LIST_ROOMS,
+    LIST_ROOMS_RESP,
+    JOIN_ROOM,
+    LEAVE_ROOM,
+    SEND_MSG,
+    RELAY_MSG
+}; */
+
+/*
+std::unordered_map<std::string, Command> cmd_map {
+    {"conn_init", CONN_INIT},
+    {"list_rooms", LIST_ROOMS},
+    {"join_room", JOIN_ROOM},
+    {"leave_room", LEAVE_ROOM},
+    {"send_msg", SEND_MSG}
+}
+*/
+
+
+std::unordered_map<std::string, uint32_t> opcode_map{
+    {"ERR", 0x10000001U},
+    {"CONN_INIT", 0x10000002U},
+    {"CONN_ACCEPT", 0x10000003},
+    {"KEEPALIVE", 0x10000004},
+    {"LIST_ROOMS", 0x10000005},
+    {"LIST_ROOMS_RESP", 0x10000006},
+    {"JOIN_ROOM", 0x10000007},
+    {"LEAVE_ROOM", 0x10000008},
+    {"SEND_MSG", 0x10000009},
+    {"RELAY_MSG",0x1000000A}
 };
+
+std::unordered_map<uint32_t,std::string> opcode_map_server{
+    {0x10000001U,"ERR"},
+    {0x10000002U,"CONN_INIT"},
+    {0x10000003,"CONN_ACCEPT"},
+    {0x10000004,"KEEPALIVE"},
+    {0x10000005,"LIST_ROOMS"},
+    {0x10000006,"LIST_ROOMS_RESP"},
+    {0x10000007,"JOIN_ROOM"},
+    {0x10000008,"LEAVE_ROOM"},
+    {0x10000009,"SEND_MSG"},
+    {0x1000000A,"RELAY_MSG"}
+};
+
 
 bool execute_sql(sqlite3* db, const std::string& sql)
 {
@@ -23,24 +70,13 @@ bool execute_sql(sqlite3* db, const std::string& sql)
     return true;
 }
 
-void insert_data(sqlite3* db, int thread_id)
+void insert_data(sqlite3* db, std::string sql)
 {
-    for (int i = 0; i < 5; ++i)
+    std::lock_guard<std::mutex> lock(db_mutex);
+
+    if (execute_sql(db, sql))
     {
-        std::lock_guard<std::mutex> lock(db_mutex);
-
-        std::string sql =
-            "INSERT INTO users (name, age) VALUES ('Thread_" +
-            std::to_string(thread_id) +
-            "', " +
-            std::to_string(20 + thread_id) +
-            ");";
-
-        if (execute_sql(db, sql))
-        {
-            std::cout << "[Writer " << thread_id
-                      << "] Inserted row " << i << std::endl;
-        }
+        std::cout << "[Writer] Inserted row "<< std::endl;
     }
 }
 
@@ -48,7 +84,7 @@ void read_data(sqlite3* db, int thread_id)
 {
     std::lock_guard<std::mutex> lock(db_mutex);
 
-    std::string sql = "SELECT user_id, username FROM users;";
+    std::string sql = "SELECT user_id, last_msg FROM users;";
 
     sqlite3_stmt* stmt;
 
@@ -74,8 +110,8 @@ void read_data(sqlite3* db, int thread_id)
     {
         int user_id = sqlite3_column_int(stmt, 0);
 
-        const unsigned char* username =
-            sqlite3_column_text(stmt, 1);
+        const int username =
+            sqlite3_column_int(stmt, 1);
 
 
         std::cout << "ID: " << user_id

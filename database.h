@@ -19,11 +19,15 @@ extern std::mutex db_mutex;
 bool execute_sql(sqlite3* db, const std::string& sql);
 
 // Thread worker functions
-void insert_data(sqlite3* db, int thread_id);
+void insert_data(sqlite3* db, std::string sql);
 
 void read_data(sqlite3* db, int thread_id);
 
+enum opcodes : uint32_t {
+    CONN_INIT =  0x10000002U
+};
 
-extern std::unordered_map<std::string, uint32_t> opcodes;
+extern std::unordered_map<std::string, uint32_t> opcode_map;
+extern std::unordered_map<uint32_t,std::string> opcode_map_server;
 
 #endif

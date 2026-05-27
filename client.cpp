@@ -213,7 +213,7 @@ int main() {
         }
 
         uint32_t opcode =
-            opcodes["ERR"];
+            opcode_map["CONN_INIT"];
             //std::stoul(
             //    line.substr(0, pos)
             //);

@@ -22,20 +22,6 @@ struct irc_packet {
 std::vector<int> clients;
 std::mutex clients_mutex;
 
-
-    /*
-opcodes["ERR"] = 	0x10000001U;
-opcodes["CONN_INIT"] = 0x10000002U;
-opcodes["CONN_ACCEPT"] = 0x10000003U;
-opcodes["KEEPALIVE"] = 0x10000004U;
-opcodes["LIST_ROOMS"] = 0x10000005U;
-opcodes["LIST_ROOMS_RESP"] = 0x10000006U;
-opcodes["JOIN_ROOM"] = 0x10000007U;
-opcodes["LEAVE_ROOM"] = 0x10000008U;
-opcodes["SEND_MSG"] = 0x10000009U;
-opcodes["RELAY_MSG"] = 0x1000000AU;
-*/
-
 bool recv_packet(int sock, irc_packet& packet) {
     irc_pkt_header net_header;
 
@@ -180,8 +166,7 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
               << ip << ":" << port
               << std::endl;
 
-    read_data(db,56);
-
+    //Client connection loop
     while (true) {
         irc_packet packet;
 
@@ -206,6 +191,38 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
                       << text
                       << std::endl;
         }
+
+        //FIXME: HERE
+        //Switch on opcode
+
+        std::string op = opcode_map_server[packet.header.opcode];
+
+        switch(packet.header.opcode){
+            case CONN_INIT: {
+                std::cout << "CONN INIT" << std::endl;
+                auto now = std::chrono::system_clock::now();
+                auto duration = now.time_since_epoch();
+                auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+
+                std::string sql_str = "INSERT INTO users (last_msg) VALUES (" + std::to_string(seconds) + ");";
+
+                insert_data(db,sql_str);
+
+                //FIXME: Test only, remove
+                read_data(db,56);
+
+                break;
+            }
+
+            default: {
+                std::cout << "Unrecognized opcode" << std::endl;
+                break;
+            }
+
+        }
+
+
+
 
         broadcast_packet(packet,
                          client_socket);
@@ -251,7 +268,7 @@ int main() {
 
     std::string create_table_sql =
     "CREATE TABLE IF NOT EXISTS users ("
-    "user_id INTEGER PRIMARY KEY AUTOINCREMENT, thread_id INTEGER"
+    "user_id INTEGER PRIMARY KEY AUTOINCREMENT, last_msg INTEGER"
     ");";
 
     if (!execute_sql(db, create_table_sql))
@@ -306,6 +323,8 @@ int main() {
             perror("accept");
             continue;
         }
+
+        //Add client
 
         {
             std::lock_guard<std::mutex> lock(
