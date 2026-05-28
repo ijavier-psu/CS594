@@ -19,8 +19,30 @@ struct irc_packet {
     std::vector<uint8_t> payload;
 };
 
+struct irc_pkt_conn_accept {
+    irc_pkt_header header;
+    uint16_t userid;
+};
+
 std::vector<int> clients;
 std::mutex clients_mutex;
+
+bool recv_all(int sock, void* buffer, size_t length) {
+    uint8_t* ptr = static_cast<uint8_t*>(buffer);
+
+    while (length > 0) {
+        ssize_t bytes = recv(sock, ptr, length, 0);
+
+        if (bytes <= 0) {
+            return false;
+        }
+
+        ptr += bytes;
+        length -= bytes;
+    }
+
+    return true;
+}
 
 bool recv_packet(int sock, irc_packet& packet) {
     irc_pkt_header net_header;
@@ -73,6 +95,22 @@ bool recv_packet(int sock, irc_packet& packet) {
     return true;
 }
 
+bool send_all(int sock, const void* buffer, size_t length) {
+    const uint8_t* ptr = static_cast<const uint8_t*>(buffer);
+
+    while (length > 0) {
+        ssize_t bytes = send(sock, ptr, length, 0);
+
+        if (bytes <= 0) {
+            return false;
+        }
+
+        ptr += bytes;
+        length -= bytes;
+    }
+
+    return true;
+}
 
 bool send_packet(int sock, const irc_packet& packet) {
     size_t total_size =
@@ -133,6 +171,85 @@ void broadcast_packet(const irc_packet& packet, int sender_socket) {
     }
 }
 
+bool handle_packet(int sock, sqlite3* db)
+{
+    irc_pkt_header header;
+
+    if (!recv_all(sock,&header,sizeof(header))){
+        return false;
+    }
+
+    header.opcode = ntohl(header.opcode);
+ 
+    header.length = ntohl(header.length);
+
+    switch (header.opcode){
+        case CONN_INIT:
+        {
+            std::cout << "CONN INIT" << std::endl;
+            auto now = std::chrono::system_clock::now();
+            auto duration = now.time_since_epoch();
+            auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+
+            std::string sql_str = "INSERT INTO users (last_msg) VALUES (" + std::to_string(seconds) + ");";
+
+            //FIXME: need special function for user adding to ensure lock stays until we read the user_id from db
+            insert_data(db,sql_str);
+
+            //FIXME: Test only, remove
+            read_data(db,56);
+
+            //FIXME: Read returned user_id:
+            uint16_t user_id = 1011;
+
+            //Send client their client id
+            //std::string message = line.substr(pos + 1);
+
+            irc_pkt_conn_accept packet;
+
+            packet.header.opcode = htonl(CONN_ACCEPT);
+            packet.header.length = htonl(sizeof(uint16_t));
+
+            packet.userid = htons(user_id);
+
+            return send_all(sock, &packet, sizeof(packet));
+            //packet.payload.assign(message.begin(),message.end());
+
+            //if (!send_packet(sock, packet)) {
+            //    std::cout << "Send failed\n";
+            //    break;
+            //} 
+        }
+
+        default:
+        {
+            std::cout
+                << "Unknown opcode: "
+                << header.opcode
+                << std::endl;
+
+            // discard unknown payload
+            if (header.length > 0)
+            {
+                std::vector<uint8_t>
+                    discard(
+                        header.length
+                    );
+
+                recv_all(sock,
+                         discard.data(),
+                         discard.size());
+            }
+
+            break;
+        }
+    }
+
+    return true;
+}
+
+
+
 void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
     char ip[INET_ADDRSTRLEN];
     uint16_t user_id = 0;
@@ -151,6 +268,12 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
 
     //Client connection loop
     while (true) {
+
+        if (!handle_packet(client_socket,db)){
+            break; }
+
+            //////FIXME DELETE
+        /*
         irc_packet packet;
 
         if (!recv_packet(client_socket,
@@ -208,7 +331,7 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
                     std::cout << "Send failed\n";
                     break;
                 } */
-
+                /*
                 break;
             }
 
@@ -220,10 +343,11 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
         }
 
 
-
+        
 
         broadcast_packet(packet,
                          client_socket);
+        */
     }
 
     close(client_socket);

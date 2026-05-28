@@ -22,10 +22,38 @@ struct irc_pkt_header {
 
 int user_id = 0;
 
+// Packet Definitions 
 struct irc_packet {
     irc_pkt_header header;
     std::vector<uint8_t> payload;
 };
+
+struct irc_pkt_conn_init {
+    irc_pkt_header header;
+};
+
+struct irc_pkt_conn_accept {
+    irc_pkt_header header;
+    uint16_t userid;
+};
+
+
+bool recv_all(int sock, void* buffer, size_t length) {
+    uint8_t* ptr = static_cast<uint8_t*>(buffer);
+
+    while (length > 0) {
+        ssize_t bytes = recv(sock, ptr, length, 0);
+
+        if (bytes <= 0) {
+            return false;
+        }
+
+        ptr += bytes;
+        length -= bytes;
+    }
+
+    return true;
+}
 
 bool recv_packet(int sock, irc_packet& packet) {
     irc_pkt_header net_header;
@@ -78,6 +106,22 @@ bool recv_packet(int sock, irc_packet& packet) {
     return true;
 }
 
+bool send_all(int sock, const void* buffer, size_t length) {
+    const uint8_t* ptr = static_cast<const uint8_t*>(buffer);
+
+    while (length > 0) {
+        ssize_t bytes = send(sock, ptr, length, 0);
+
+        if (bytes <= 0) {
+            return false;
+        }
+
+        ptr += bytes;
+        length -= bytes;
+    }
+
+    return true;
+}
 
 bool send_packet(int sock, const irc_packet& packet) {
     size_t total_size =
@@ -122,8 +166,77 @@ bool send_packet(int sock, const irc_packet& packet) {
     return true;
 }
 
+
+bool handle_packet(int sock)
+{
+    irc_pkt_header header;
+
+    if (!recv_all(sock,&header,sizeof(header))){
+        return false;
+    }
+
+    header.opcode = ntohl(header.opcode);
+ 
+    header.length = ntohl(header.length);
+
+    switch (header.opcode){
+        case CONN_ACCEPT:
+        {
+            irc_pkt_conn_accept packet;
+
+            packet.header = header;
+
+            if (!recv_all(sock, &packet.userid, sizeof(packet.userid))){
+                return false;
+            }
+
+            packet.userid = ntohs(packet.userid);
+
+            std::cout
+                << "Client recieved CONN_ACCEPT\n";
+
+            std::cout
+                << "userid="
+                << packet.userid
+                << std::endl;
+
+            user_id = packet.userid;
+
+            break;
+        }
+
+        default:
+        {
+            std::cout
+                << "Unknown opcode: "
+                << header.opcode
+                << std::endl;
+
+            // discard unknown payload
+            if (header.length > 0)
+            {
+                std::vector<uint8_t>
+                    discard( header.length);
+
+                recv_all(sock, discard.data(), discard.size());
+            }
+
+            break;
+        }
+    }
+
+    return true;
+}
+
 void receive_thread(int sock) {
     while (true) {
+        
+        if (!handle_packet(sock)){
+            break; 
+        }
+
+    /// FIXME DELETE
+        /*
         irc_packet packet;
 
         if (!recv_packet(sock, packet)) {
@@ -169,29 +282,29 @@ void receive_thread(int sock) {
                 }
 
             }
-        }
+        } */
     }
 }
 
 bool init_connection(int sock) {
-     uint32_t opcode =
-            opcode_map["CONN_INIT"];
+    uint32_t opcode = opcode_map["CONN_INIT"];
 
-        std::string message = "";
+    irc_pkt_conn_init packet;
 
-        irc_packet packet;
+    packet.header.opcode =  htonl(opcode);
+    packet.header.length = htonl(0);
 
-        packet.header.opcode =opcode;
-        packet.header.length = message.size();
+    return send_all(sock, &packet, sizeof(packet));
 
-        packet.payload.assign(message.begin(), message.end());
+    //packet.payload.assign(message.begin(), message.end());
 
-        if (!send_packet(sock,packet)) {
-            std::cout << "Send failed\n";
-            return false;
-        }
-    return true;
+    //if (!send_packet(sock,packet)) {
+     //   std::cout << "Send failed\n";
+    //    return false;
+    //}
+    //return true;
 }
+
 
 int main() {
     int port = 1356;
