@@ -73,23 +73,6 @@ bool recv_packet(int sock, irc_packet& packet) {
     return true;
 }
 
-/*bool send_all(int sock, const void* buffer, size_t length) {
-    const uint8_t* ptr =
-        static_cast<const uint8_t*>(buffer);
-
-    while (length > 0) {
-        ssize_t bytes = send(sock, ptr, length, 0);
-
-        if (bytes <= 0) {
-            return false;
-        }
-
-        ptr += bytes;
-        length -= bytes;
-    }
-
-    return true;
-} */
 
 bool send_packet(int sock, const irc_packet& packet) {
     size_t total_size =
@@ -211,6 +194,21 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
                 //FIXME: Test only, remove
                 read_data(db,56);
 
+                //Send client their client id
+                /*std::string message = line.substr(pos + 1);
+
+                irc_packet packet;
+
+                packet.header.opcode = opcode;
+                packet.header.length = message.size();
+
+                packet.payload.assign(message.begin(),message.end());
+
+                if (!send_packet(sock, packet)) {
+                    std::cout << "Send failed\n";
+                    break;
+                } */
+
                 break;
             }
 
@@ -266,14 +264,8 @@ int main() {
     // Enable WAL mode for better concurrency
     execute_sql(db, "PRAGMA journal_mode=WAL;");
 
-    std::string create_table_sql =
-    "CREATE TABLE IF NOT EXISTS users ("
-    "user_id INTEGER PRIMARY KEY AUTOINCREMENT, last_msg INTEGER"
-    ");";
-
-    if (!execute_sql(db, create_table_sql))
-    {
-        sqlite3_close(db);
+    if (! init_db(db) ){
+        std::cout << "Failed to initialized database!"<<std::endl;
         return 1;
     }
 

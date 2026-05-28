@@ -3,6 +3,8 @@
 
 std::mutex db_mutex;
 
+//FIXME: Figure out which structures are actually needed
+
 /*enum opcodes {
     ERR,
     CONN_INIT,
@@ -120,4 +122,43 @@ void read_data(sqlite3* db, int thread_id)
     }
 
     sqlite3_finalize(stmt);
+}
+
+int init_db(sqlite3* db){
+    std::string create_table_sql =
+    "CREATE TABLE IF NOT EXISTS users ("
+    "user_id INTEGER PRIMARY KEY AUTOINCREMENT, last_msg INTEGER"
+    ");";
+
+    if (!execute_sql(db, create_table_sql))
+    {
+        sqlite3_close(db);
+        return 0;
+    }
+
+    std::string create_table_rooms =
+    "CREATE TABLE IF NOT EXISTS rooms ("
+    "room_name TEXT PRIMARY KEY"
+    ");";
+
+    if (!execute_sql(db, create_table_rooms))
+    {
+        sqlite3_close(db);
+        return 0;
+    }
+
+    std::string create_table_2 = 
+    "CREATE TABLE IF NOT EXISTS room_users ("
+    "room_name TEXT NOT NULL, user_id INTEGER NOT NULL, primary key (room_name,user_id)"
+    "FOREIGN KEY (room_name) references rooms(room_name) ON DELETE CASCADE,"
+    "FOREIGN KEY (user_id) references users(user_id) ON DELETE CASCADE);";
+    
+    if (!execute_sql(db, create_table_2))
+    {
+        sqlite3_close(db);
+        return 0;
+    }
+
+    return 1;
+
 }

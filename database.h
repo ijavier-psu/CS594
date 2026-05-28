@@ -23,8 +23,11 @@ void insert_data(sqlite3* db, std::string sql);
 
 void read_data(sqlite3* db, int thread_id);
 
+int init_db(sqlite3* db);
+
 enum opcodes : uint32_t {
-    CONN_INIT =  0x10000002U
+    CONN_INIT =  0x10000002U,
+    CONN_ACCEPT = 0x10000003U
 };
 
 extern std::unordered_map<std::string, uint32_t> opcode_map;

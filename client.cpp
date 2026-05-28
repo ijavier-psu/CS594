@@ -20,18 +20,21 @@ struct irc_pkt_header {
 };
 #pragma pack(pop)
 
+int user_id = 0;
+
 struct irc_packet {
     irc_pkt_header header;
     std::vector<uint8_t> payload;
 };
 
-bool recv_all(int sock, void* buffer, size_t length) {
-    uint8_t* ptr =
-        static_cast<uint8_t*>(buffer);
+bool recv_packet(int sock, irc_packet& packet) {
+    irc_pkt_header net_header;
+
+    uint8_t* ptr = reinterpret_cast<uint8_t*>(&net_header);
+    size_t length = sizeof(net_header);
 
     while (length > 0) {
-        ssize_t bytes =
-            recv(sock, ptr, length, 0);
+        ssize_t bytes = recv(sock, ptr, length, 0);
 
         if (bytes <= 0) {
             return false;
@@ -39,74 +42,6 @@ bool recv_all(int sock, void* buffer, size_t length) {
 
         ptr += bytes;
         length -= bytes;
-    }
-
-    return true;
-}
-
-bool send_all(int sock,
-              const void* buffer,
-              size_t length) {
-    const uint8_t* ptr =
-        static_cast<const uint8_t*>(buffer);
-
-    while (length > 0) {
-        ssize_t bytes =
-            send(sock, ptr, length, 0);
-
-        if (bytes <= 0) {
-            return false;
-        }
-
-        ptr += bytes;
-        length -= bytes;
-    }
-
-    return true;
-}
-
-bool send_packet(int sock,
-                 const irc_packet& packet) {
-    size_t total_size =
-        sizeof(irc_pkt_header) +
-        packet.payload.size();
-
-    std::vector<uint8_t> buffer(
-        total_size
-    );
-
-    irc_pkt_header net_header;
-
-    net_header.opcode =
-        htonl(packet.header.opcode);
-
-    net_header.length =
-        htonl(packet.header.length);
-
-    memcpy(buffer.data(),
-           &net_header,
-           sizeof(net_header));
-
-    if (!packet.payload.empty()) {
-        memcpy(buffer.data()
-                   + sizeof(net_header),
-               packet.payload.data(),
-               packet.payload.size());
-    }
-
-    return send_all(sock,
-                    buffer.data(),
-                    buffer.size());
-}
-
-bool recv_packet(int sock,
-                 irc_packet& packet) {
-    irc_pkt_header net_header;
-
-    if (!recv_all(sock,
-                  &net_header,
-                  sizeof(net_header))) {
-        return false;
     }
 
     packet.header.opcode =
@@ -125,11 +60,63 @@ bool recv_packet(int sock,
     );
 
     if (packet.header.length > 0) {
-        if (!recv_all(sock,
-                      packet.payload.data(),
-                      packet.payload.size())) {
+        ptr = reinterpret_cast<uint8_t*>(packet.payload.data());
+        length = packet.payload.size();
+
+        while (length > 0) {
+            ssize_t bytes = recv(sock, ptr, length, 0);
+
+            if (bytes <= 0) {
+                return false;
+            }
+
+            ptr += bytes;
+            length -= bytes;
+        }
+    }
+
+    return true;
+}
+
+
+bool send_packet(int sock, const irc_packet& packet) {
+    size_t total_size =
+        sizeof(irc_pkt_header) +
+        packet.payload.size();
+
+    //FIXME
+    std::vector<uint8_t> buffer(total_size);
+    
+    const uint8_t* ptr = reinterpret_cast<uint8_t*>(buffer.data());
+    size_t length = buffer.size();
+
+    irc_pkt_header net_header;
+
+    net_header.opcode =
+        htonl(packet.header.opcode);
+
+    net_header.length =
+        htonl(packet.header.length);
+
+    memcpy(buffer.data(),
+           &net_header,
+           sizeof(net_header));
+
+    if (!packet.payload.empty()) {
+        memcpy(buffer.data() + sizeof(net_header),
+               packet.payload.data(),
+               packet.payload.size());
+    }
+
+    while (length > 0) {
+        ssize_t bytes = send(sock, ptr, length, 0);
+
+        if (bytes <= 0) {
             return false;
         }
+
+        ptr += bytes;
+        length -= bytes;
     }
 
     return true;
@@ -164,11 +151,46 @@ void receive_thread(int sock) {
             std::cout << "Payload: "
                       << text
                       << "\n";
-        }
+        
 
-        std::cout << "> ";
-        std::cout.flush();
+            std::cout << "> ";
+            std::cout.flush();
+
+            switch(packet.header.opcode){
+                case CONN_ACCEPT: {
+                    user_id = std::stoi(text);
+                    std::cout << "user id: "<< text << std::endl;
+                    break;
+                }
+
+                default: {
+                    std::cout << "Unrecognized opcode" << std::endl;
+                    break;
+                }
+
+            }
+        }
     }
+}
+
+bool init_connection(int sock) {
+     uint32_t opcode =
+            opcode_map["CONN_INIT"];
+
+        std::string message = "";
+
+        irc_packet packet;
+
+        packet.header.opcode =opcode;
+        packet.header.length = message.size();
+
+        packet.payload.assign(message.begin(), message.end());
+
+        if (!send_packet(sock,packet)) {
+            std::cout << "Send failed\n";
+            return false;
+        }
+    return true;
 }
 
 int main() {
@@ -190,6 +212,16 @@ int main() {
 
     //setup listening thread
     std::thread receiver(receive_thread, sock);
+
+    if (!init_connection(sock)){
+        std::cout<<"Failed to initialize contact with server"<<std::endl;
+        return 1;
+    }
+
+    while(user_id == 0){
+        sleep(1);
+    }
+
 
     //Client UI loop
     //FIXME
@@ -218,26 +250,17 @@ int main() {
             //    line.substr(0, pos)
             //);
 
-        std::string message =
-            line.substr(pos + 1);
+        std::string message = line.substr(pos + 1);
 
         irc_packet packet;
 
-        packet.header.opcode =
-            opcode;
+        packet.header.opcode = opcode;
+        packet.header.length = message.size();
 
-        packet.header.length =
-            message.size();
+        packet.payload.assign(message.begin(),message.end());
 
-        packet.payload.assign(
-            message.begin(),
-            message.end()
-        );
-
-        if (!send_packet(sock,
-                         packet)) {
-            std::cout
-                << "Send failed\n";
+        if (!send_packet(sock, packet)) {
+            std::cout << "Send failed\n";
             break;
         }
     }
