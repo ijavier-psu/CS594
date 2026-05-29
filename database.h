@@ -21,6 +21,8 @@ bool execute_sql(sqlite3* db, const std::string& sql);
 // Thread worker functions
 void insert_data(sqlite3* db, std::string sql);
 
+uint16_t insert_user_data(sqlite3* db, std::string sql);
+
 void read_data(sqlite3* db, int thread_id);
 
 int init_db(sqlite3* db);

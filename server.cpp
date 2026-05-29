@@ -171,8 +171,7 @@ void broadcast_packet(const irc_packet& packet, int sender_socket) {
     }
 }
 
-bool handle_packet(int sock, sqlite3* db)
-{
+bool handle_packet(int sock, sqlite3* db,uint16_t userid){
     irc_pkt_header header;
 
     if (!recv_all(sock,&header,sizeof(header))){
@@ -186,21 +185,22 @@ bool handle_packet(int sock, sqlite3* db)
     switch (header.opcode){
         case CONN_INIT:
         {
-            std::cout << "CONN INIT" << std::endl;
+            std::cout << "SERVER recieved CONN INIT" << std::endl;
+            int recv_id;
             auto now = std::chrono::system_clock::now();
             auto duration = now.time_since_epoch();
             auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
 
-            std::string sql_str = "INSERT INTO users (last_msg) VALUES (" + std::to_string(seconds) + ");";
+            std::string sql_str = "INSERT INTO users (last_msg) VALUES (" + std::to_string(seconds) + ") RETURNING userid;";
 
-            //FIXME: need special function for user adding to ensure lock stays until we read the user_id from db
-            insert_data(db,sql_str);
+            //FIXME: handle errors
+            uint16_t userid = insert_user_data(db,sql_str);
 
             //FIXME: Test only, remove
             read_data(db,56);
 
-            //FIXME: Read returned user_id:
-            uint16_t user_id = 1011;
+            //FIXME: Read returned userid:
+            //uint16_t userid = 1011;
 
             //Send client their client id
             //std::string message = line.substr(pos + 1);
@@ -210,7 +210,7 @@ bool handle_packet(int sock, sqlite3* db)
             packet.header.opcode = htonl(CONN_ACCEPT);
             packet.header.length = htonl(sizeof(uint16_t));
 
-            packet.userid = htons(user_id);
+            packet.userid = htons(userid);
 
             return send_all(sock, &packet, sizeof(packet));
             //packet.payload.assign(message.begin(),message.end());
@@ -252,7 +252,7 @@ bool handle_packet(int sock, sqlite3* db)
 
 void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
     char ip[INET_ADDRSTRLEN];
-    uint16_t user_id = 0;
+    uint16_t userid = 0;
 
     inet_ntop(AF_INET,
               &client_addr.sin_addr,
@@ -269,7 +269,7 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
     //Client connection loop
     while (true) {
 
-        if (!handle_packet(client_socket,db)){
+        if (!handle_packet(client_socket,db, userid)){
             break; }
 
             //////FIXME DELETE

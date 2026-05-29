@@ -82,11 +82,37 @@ void insert_data(sqlite3* db, std::string sql)
     }
 }
 
+//Keep lock through write and subsequent read 
+uint16_t insert_user_data(sqlite3* db, std::string sql)
+{
+    std::lock_guard<std::mutex> lock(db_mutex);
+
+    sqlite3_stmt* stmt;
+    sqlite3_int64 last_id;
+    //const char* sql = "INSERT INTO users (name) VALUES ('Bob') RETURNING id;";
+
+    if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            last_id = sqlite3_column_int64(stmt, 0);
+            std::cout << "Inserted row with USERID: " << last_id << std::endl;
+        }
+    }
+    //FIXME
+    else {
+        return 0;
+    }
+    
+    //free
+    sqlite3_finalize(stmt);
+    uint16_t userid = (uint16_t) last_id;
+    return userid;
+}
+
 void read_data(sqlite3* db, int thread_id)
 {
     std::lock_guard<std::mutex> lock(db_mutex);
 
-    std::string sql = "SELECT user_id, last_msg FROM users;";
+    std::string sql = "SELECT userid, last_msg FROM users;";
 
     sqlite3_stmt* stmt;
 
@@ -110,13 +136,13 @@ void read_data(sqlite3* db, int thread_id)
 
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
     {
-        int user_id = sqlite3_column_int(stmt, 0);
+        int userid = sqlite3_column_int(stmt, 0);
 
         const int username =
             sqlite3_column_int(stmt, 1);
 
 
-        std::cout << "ID: " << user_id
+        std::cout << "ID: " << userid
                   << ", Name: " << username
                   << std::endl;
     }
@@ -127,7 +153,7 @@ void read_data(sqlite3* db, int thread_id)
 int init_db(sqlite3* db){
     std::string create_table_sql =
     "CREATE TABLE IF NOT EXISTS users ("
-    "user_id INTEGER PRIMARY KEY AUTOINCREMENT, last_msg INTEGER"
+    "userid INTEGER PRIMARY KEY AUTOINCREMENT, last_msg INTEGER"
     ");";
 
     if (!execute_sql(db, create_table_sql))
@@ -149,9 +175,9 @@ int init_db(sqlite3* db){
 
     std::string create_table_2 = 
     "CREATE TABLE IF NOT EXISTS room_users ("
-    "room_name TEXT NOT NULL, user_id INTEGER NOT NULL, primary key (room_name,user_id)"
+    "room_name TEXT NOT NULL, userid INTEGER NOT NULL, primary key (room_name,userid)"
     "FOREIGN KEY (room_name) references rooms(room_name) ON DELETE CASCADE,"
-    "FOREIGN KEY (user_id) references users(user_id) ON DELETE CASCADE);";
+    "FOREIGN KEY (userid) references users(userid) ON DELETE CASCADE);";
     
     if (!execute_sql(db, create_table_2))
     {

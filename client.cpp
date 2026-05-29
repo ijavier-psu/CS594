@@ -20,7 +20,7 @@ struct irc_pkt_header {
 };
 #pragma pack(pop)
 
-int user_id = 0;
+int userid = 0;
 
 // Packet Definitions 
 struct irc_packet {
@@ -200,7 +200,7 @@ bool handle_packet(int sock)
                 << packet.userid
                 << std::endl;
 
-            user_id = packet.userid;
+            userid = packet.userid;
 
             break;
         }
@@ -271,7 +271,7 @@ void receive_thread(int sock) {
 
             switch(packet.header.opcode){
                 case CONN_ACCEPT: {
-                    user_id = std::stoi(text);
+                    userid = std::stoi(text);
                     std::cout << "user id: "<< text << std::endl;
                     break;
                 }
@@ -331,7 +331,7 @@ int main() {
         return 1;
     }
 
-    while(user_id == 0){
+    while(userid == 0){
         sleep(1);
     }
 
