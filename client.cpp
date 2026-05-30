@@ -371,15 +371,24 @@ int main() {
             continue;
         }
 
-        
+        switch (opcode){
+            case LIST_ROOMS: {
+                std::cout<< "test"<<std::endl;
+                irc_pkt_list_rooms packet;
+                packet.header.opcode =  htonl(opcode);
+                packet.header.length = htonl(0);
+                send_all(sock, &packet, sizeof(packet));
 
-        irc_packet packet;
+                break;
+            }
+            default: {
+                break;
+            }
 
-        std::string message = ""; 
-        if(opcode != LIST_ROOMS){
-        message = line.substr(pos + 1);
-        packet.payload.assign(message.begin(),message.end());
         }
+
+        /*
+        irc_packet packet;
 
         std::cout<<"opcode "<<opcode<<std::endl;
         packet.header.opcode =  htonl(opcode);
@@ -391,6 +400,7 @@ int main() {
         //    std::cout << "Send failed\n";
         //    break;
         //}
+        */
     }
 
     close(sock);

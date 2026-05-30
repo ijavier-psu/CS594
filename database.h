@@ -67,6 +67,9 @@ struct irc_pkt_conn_accept {
     uint16_t userid;
 };
 
+struct irc_pkt_list_rooms {
+    irc_pkt_header header;
+};
 struct irc_pkt_list_rooms_resp {
 	irc_pkt_header header;
 	char rooms[MAX_ROOMS][20];
