@@ -151,7 +151,7 @@ void broadcast_packet(const irc_packet& packet, int sender_socket) {
     }
 }
 
-int handle_packet(int sock, sqlite3* db,uint16_t userid){
+int handle_packet(int sock, sqlite3* db,uint16_t userid,std::vector<std::string> &user_rooms){
     irc_pkt_header header;
 
     if (!recv_all(sock,&header,sizeof(header))){
@@ -175,21 +175,6 @@ int handle_packet(int sock, sqlite3* db,uint16_t userid){
 
             //FIXME: handle errors
             uint16_t userid = insert_user_data(db,sql_str);
-
-            //FIXME: Test only, remove
-            std::vector<std::string> rooms = read_data(db);
-            std::cout << "Rooms: "<<std::endl;
-            for (const auto& element : rooms) {
-                std::cout << element << " "<<std::endl;
-            }
-            std::cout << rooms.size() << " "<<std::endl;
-            int num_rooms = rooms.size();
-
-            const char** room_list = new const char*[num_rooms];
-            for(int i=0; i<num_rooms;i++){
-                room_list[i] = rooms[i].c_str();
-            }
-
 
             //FIXME: Read returned userid:
             //uint16_t userid = 1011;
@@ -274,6 +259,12 @@ int handle_packet(int sock, sqlite3* db,uint16_t userid){
             std::string link = "INSERT INTO room_users (userid, room_name) VALUES ("+std::to_string(userid) +",\"" +packet.room_name +"\");";
             insert_data(db,link);
 
+            user_rooms.push_back(packet.room_name);
+                    std::cout<<"New room list1: "<<std::endl;
+            for (const auto& element : user_rooms) {
+                std::cout << element << " "<<std::endl;
+            }
+
             break;
         }
 
@@ -309,6 +300,7 @@ int handle_packet(int sock, sqlite3* db,uint16_t userid){
 void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
     char ip[INET_ADDRSTRLEN];
     uint16_t userid = 0;
+    std::vector<std::string> rooms;
 
     inet_ntop(AF_INET,
               &client_addr.sin_addr,
@@ -323,13 +315,19 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
               << std::endl;
 
     
-    userid = (uint16_t)handle_packet(client_socket,db, userid);
+    userid = (uint16_t)handle_packet(client_socket,db, userid,rooms);
+    
 
     //Client connection loop
     while (true) {
 
-        if (!handle_packet(client_socket,db, userid)){
+        if (!handle_packet(client_socket,db, userid,rooms)){
             break; }
+
+        std::cout<<"New room list: "<<std::endl;
+        for (const auto& element : rooms) {
+            std::cout << element << " "<<std::endl;
+        }
 
             //////FIXME DELETE
         /*
@@ -401,9 +399,6 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
 
         }
 
-
-        
-
         broadcast_packet(packet,
                          client_socket);
         */
@@ -423,6 +418,14 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
             clients.end()
         );
     }
+
+    //FIXME: need lock to persist through all transactions, move to database.cpp
+    //delete user from database upon disconnect
+    //FIXME: get list of users rooms first
+    std::string delete_user = "DELETE FROM users where userid = "+std::to_string(userid)+";";
+    execute_sql(db,delete_user);
+
+    //FIXME: Check if any of the rooms now have 0 users, remove
 
     std::cout << "Client disconnected\n";
 }

@@ -135,6 +135,9 @@ std::vector<std::string> read_data(sqlite3* db)
 }
 
 int init_db(sqlite3* db){
+
+    execute_sql(db,"PRAGMA foreign_keys = ON;");
+
     std::string create_table_sql =
     "CREATE TABLE IF NOT EXISTS users ("
     "userid INTEGER PRIMARY KEY AUTOINCREMENT, last_msg INTEGER"
