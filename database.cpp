@@ -108,46 +108,30 @@ uint16_t insert_user_data(sqlite3* db, std::string sql)
     return userid;
 }
 
-void read_data(sqlite3* db, int thread_id)
+std::vector<std::string> read_data(sqlite3* db)
 {
     std::lock_guard<std::mutex> lock(db_mutex);
 
-    std::string sql = "SELECT userid, last_msg FROM users;";
-
     sqlite3_stmt* stmt;
+    std::vector<std::string> rooms;
+    std::string sql = "SELECT * FROM rooms;";
 
-    int rc = sqlite3_prepare_v2(
-        db,
-        sql.c_str(),
-        -1,
-        &stmt,
-        nullptr
-    );
+    int rc = sqlite3_prepare_v2( db, sql.c_str(), -1, &stmt, nullptr);
 
-    if (rc != SQLITE_OK)
-    {
-        std::cerr << "Failed to prepare statement: "
-                  << sqlite3_errmsg(db)
-                  << std::endl;
-        return;
+    if (rc != SQLITE_OK){
+        std::cerr << "Failed to prepare statement: "<< sqlite3_errmsg(db)<< std::endl;
+        return rooms;
     }
 
-    std::cout << "\n[Reader " << thread_id << "] Reading database:\n";
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW){
+        std::string room_name = (const char*) sqlite3_column_text(stmt, 0);
 
-    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
-    {
-        int userid = sqlite3_column_int(stmt, 0);
-
-        const int username =
-            sqlite3_column_int(stmt, 1);
-
-
-        std::cout << "ID: " << userid
-                  << ", Name: " << username
-                  << std::endl;
+        std::cout << "Room Name: " << room_name<< std::endl;
+        rooms.push_back(room_name);
     }
 
     sqlite3_finalize(stmt);
+    return rooms;
 }
 
 int init_db(sqlite3* db){

@@ -11,32 +11,7 @@
 
 #include "database.h"
 
-constexpr uint32_t MAX_PAYLOAD_SIZE = 4096;
-
-#pragma pack(push, 1)
-struct irc_pkt_header {
-    uint32_t opcode;
-    uint32_t length;
-};
-#pragma pack(pop)
-
 int userid = 0;
-
-// Packet Definitions 
-struct irc_packet {
-    irc_pkt_header header;
-    std::vector<uint8_t> payload;
-};
-
-struct irc_pkt_conn_init {
-    irc_pkt_header header;
-};
-
-struct irc_pkt_conn_accept {
-    irc_pkt_header header;
-    uint16_t userid;
-};
-
 
 bool recv_all(int sock, void* buffer, size_t length) {
     uint8_t* ptr = static_cast<uint8_t*>(buffer);

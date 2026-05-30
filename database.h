@@ -23,7 +23,7 @@ void insert_data(sqlite3* db, std::string sql);
 
 uint16_t insert_user_data(sqlite3* db, std::string sql);
 
-void read_data(sqlite3* db, int thread_id);
+std::vector<std::string> read_data(sqlite3* db);
 
 int init_db(sqlite3* db);
 
@@ -34,5 +34,28 @@ enum opcodes : uint32_t {
 
 extern std::unordered_map<std::string, uint32_t> opcode_map;
 extern std::unordered_map<uint32_t,std::string> opcode_map_server;
+
+constexpr uint32_t MAX_PAYLOAD_SIZE = 4096;
+
+#pragma pack(push, 1)
+struct irc_pkt_header {
+    uint32_t opcode;
+    uint32_t length;
+};
+#pragma pack(pop)
+
+struct irc_packet {
+    irc_pkt_header header;
+    std::vector<uint8_t> payload;
+};
+
+struct irc_pkt_conn_init {
+    irc_pkt_header header;
+};
+
+struct irc_pkt_conn_accept {
+    irc_pkt_header header;
+    uint16_t userid;
+};
 
 #endif

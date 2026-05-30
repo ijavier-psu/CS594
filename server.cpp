@@ -4,26 +4,6 @@
 
 //std::mutex db_mutex;
 
-//FIXME
-constexpr uint32_t MAX_PAYLOAD_SIZE = 4096;
-
-#pragma pack(push, 1)
-struct irc_pkt_header {
-    uint32_t opcode;
-    uint32_t length;
-};
-#pragma pack(pop)
-
-struct irc_packet {
-    irc_pkt_header header;
-    std::vector<uint8_t> payload;
-};
-
-struct irc_pkt_conn_accept {
-    irc_pkt_header header;
-    uint16_t userid;
-};
-
 std::vector<int> clients;
 std::mutex clients_mutex;
 
@@ -197,7 +177,11 @@ bool handle_packet(int sock, sqlite3* db,uint16_t userid){
             uint16_t userid = insert_user_data(db,sql_str);
 
             //FIXME: Test only, remove
-            read_data(db,56);
+            std::vector<std::string> rooms = read_data(db);
+            std::cout << "Rooms: "<<std::endl;
+            for (const auto& element : rooms) {
+                std::cout << element << " "<<std::endl;
+            }
 
             //FIXME: Read returned userid:
             //uint16_t userid = 1011;
