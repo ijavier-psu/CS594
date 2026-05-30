@@ -153,6 +153,7 @@ bool handle_packet(int sock)
     header.opcode = ntohl(header.opcode);
  
     header.length = ntohl(header.length);
+    std::cout<<"Length 1: "<<header.length<<std::endl;
 
     switch (header.opcode){
         case CONN_ACCEPT:
@@ -180,10 +181,31 @@ bool handle_packet(int sock)
             break;
         }
 
+        case LIST_ROOMS_RESP:
+        {
+            std::cout << "Client received LIST_ROOMS_RESP" << std::endl;
+
+            irc_pkt_list_rooms_resp packet;
+            packet.header = header;
+            //packet.header.length = ntohl(packet.header.length);
+            int num_rooms = header.length / 20;
+            if (!recv_all(sock, &packet.rooms, header.length)){
+                return false;
+            }
+
+            std::cout<< "size: "<<header.length<<" num rooms: "<<num_rooms<<std::endl;
+
+            for (uint32_t i = 0; i < num_rooms; i++)
+            {
+                std::cout << packet.rooms[i] << std::endl;
+            }
+            break;
+        }
+
         default:
         {
             std::cout
-                << "Unknown opcode: "
+                << "Client Received Unknown opcode: "
                 << header.opcode
                 << std::endl;
 
@@ -322,6 +344,7 @@ int main() {
         if (line == "quit") {
             break;
         }
+        std::cout<<"Input Line: "<<line<<std::endl;
 
         size_t pos = line.find(' ');
 
@@ -332,25 +355,42 @@ int main() {
             continue;
         }
 
-        uint32_t opcode =
-            opcode_map["CONN_INIT"];
-            //std::stoul(
-            //    line.substr(0, pos)
-            //);
+        uint32_t opcode;
+        //    opcode_map["CONN_INIT"];
+        
+        //std::stoul(line.substr(0, pos));
+        //FIXME: handle errors
+        auto it = cmd_map.find(line.substr(0, pos));
+        if (it != cmd_map.end()) {
+            opcode = it->second;
+            std::cout<<"Read opcode "<< opcode_map_server[opcode]<<std::endl;
+            //opcode = opcode_map[op];
+        }
+        else {
+            std::cout<<"Invalid opcode"<<std::endl;
+            continue;
+        }
 
-        std::string message = line.substr(pos + 1);
+        
 
         irc_packet packet;
 
-        packet.header.opcode = opcode;
-        packet.header.length = message.size();
-
+        std::string message = ""; 
+        if(opcode != LIST_ROOMS){
+        message = line.substr(pos + 1);
         packet.payload.assign(message.begin(),message.end());
-
-        if (!send_packet(sock, packet)) {
-            std::cout << "Send failed\n";
-            break;
         }
+
+        std::cout<<"opcode "<<opcode<<std::endl;
+        packet.header.opcode =  htonl(opcode);
+        packet.header.length =  htonl(message.size());
+
+
+        send_all(sock, &packet, sizeof(packet));
+        //if (!send_packet(sock, packet)) {
+        //    std::cout << "Send failed\n";
+        //    break;
+        //}
     }
 
     close(sock);

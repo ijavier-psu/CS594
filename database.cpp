@@ -18,41 +18,41 @@ std::mutex db_mutex;
     RELAY_MSG
 }; */
 
-/*
-std::unordered_map<std::string, Command> cmd_map {
+
+std::unordered_map<std::string, opcodes> cmd_map {
     {"conn_init", CONN_INIT},
     {"list_rooms", LIST_ROOMS},
     {"join_room", JOIN_ROOM},
     {"leave_room", LEAVE_ROOM},
     {"send_msg", SEND_MSG}
-}
-*/
+};
+
 
 
 std::unordered_map<std::string, uint32_t> opcode_map{
     {"ERR", 0x10000001U},
     {"CONN_INIT", 0x10000002U},
-    {"CONN_ACCEPT", 0x10000003},
-    {"KEEPALIVE", 0x10000004},
-    {"LIST_ROOMS", 0x10000005},
-    {"LIST_ROOMS_RESP", 0x10000006},
-    {"JOIN_ROOM", 0x10000007},
-    {"LEAVE_ROOM", 0x10000008},
-    {"SEND_MSG", 0x10000009},
-    {"RELAY_MSG",0x1000000A}
+    {"CONN_ACCEPT", 0x10000003U},
+    {"KEEPALIVE", 0x10000004U},
+    {"LIST_ROOMS", 0x10000005U},
+    {"LIST_ROOMS_RESP", 0x10000006U},
+    {"JOIN_ROOM", 0x10000007U},
+    {"LEAVE_ROOM", 0x10000008U},
+    {"SEND_MSG", 0x10000009U},
+    {"RELAY_MSG",0x1000000AU}
 };
 
 std::unordered_map<uint32_t,std::string> opcode_map_server{
     {0x10000001U,"ERR"},
     {0x10000002U,"CONN_INIT"},
-    {0x10000003,"CONN_ACCEPT"},
-    {0x10000004,"KEEPALIVE"},
-    {0x10000005,"LIST_ROOMS"},
-    {0x10000006,"LIST_ROOMS_RESP"},
-    {0x10000007,"JOIN_ROOM"},
-    {0x10000008,"LEAVE_ROOM"},
-    {0x10000009,"SEND_MSG"},
-    {0x1000000A,"RELAY_MSG"}
+    {0x10000003U,"CONN_ACCEPT"},
+    {0x10000004U,"KEEPALIVE"},
+    {0x10000005U,"LIST_ROOMS"},
+    {0x10000006U,"LIST_ROOMS_RESP"},
+    {0x10000007U,"JOIN_ROOM"},
+    {0x10000008U,"LEAVE_ROOM"},
+    {0x10000009U,"SEND_MSG"},
+    {0x1000000AU,"RELAY_MSG"}
 };
 
 

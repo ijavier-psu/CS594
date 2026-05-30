@@ -182,6 +182,14 @@ bool handle_packet(int sock, sqlite3* db,uint16_t userid){
             for (const auto& element : rooms) {
                 std::cout << element << " "<<std::endl;
             }
+            std::cout << rooms.size() << " "<<std::endl;
+            int num_rooms = rooms.size();
+
+            const char** room_list = new const char*[num_rooms];
+            for(int i=0; i<num_rooms;i++){
+                room_list[i] = rooms[i].c_str();
+            }
+
 
             //FIXME: Read returned userid:
             //uint16_t userid = 1011;
@@ -203,12 +211,65 @@ bool handle_packet(int sock, sqlite3* db,uint16_t userid){
             //    std::cout << "Send failed\n";
             //    break;
             //} 
+            break;
+        }
+        case LIST_ROOMS:
+        {
+            std::vector<std::string> rooms = read_data(db);
+            std::cout << "Rooms: "<<std::endl;
+            for (const auto& element : rooms) {
+                std::cout << element << " "<<std::endl;
+            }
+            std::cout << rooms.size() << " "<<std::endl;
+            int num_rooms = rooms.size();
+            /*
+            uint32_t payload_len =
+            num_rooms * 20;
+
+            size_t total_size =
+            sizeof(irc_pkt_header)
+            + payload_len;
+
+            auto* buffer =
+            reinterpret_cast<uint8_t*>(
+                malloc(total_size));
+
+            auto* header =
+            reinterpret_cast<irc_pkt_header*>(
+            buffer);
+
+            header->opcode =
+            htonl(LIST_ROOMS_RESP);
+
+            header->length =
+            htonl(payload_len);
+            */
+
+            irc_pkt_list_rooms_resp packet;
+
+            packet.header.opcode = htonl(LIST_ROOMS_RESP);
+            packet.header.length = htonl(num_rooms * 20);
+
+            std::cout<<"size: "<<num_rooms * 20<<std::endl;
+
+            //char* room_list = new char[num_rooms *20];
+            for(int i=0; i<num_rooms;i++){
+                strncpy(packet.rooms[i], rooms[i].c_str(),19);
+                std::cout<<"arr size: "<<sizeof(packet.rooms[i]) <<std::endl;
+                //room_list[i] = rooms[i].c_str();
+            }
+
+            std::cout<< packet.rooms << std::endl;
+
+            return send_all(sock, &packet, sizeof(irc_pkt_header)+ num_rooms * 20);
+
+            break;
         }
 
         default:
         {
             std::cout
-                << "Unknown opcode: "
+                << "Server recieved Unknown opcode: "
                 << header.opcode
                 << std::endl;
 

@@ -29,13 +29,22 @@ int init_db(sqlite3* db);
 
 enum opcodes : uint32_t {
     CONN_INIT =  0x10000002U,
-    CONN_ACCEPT = 0x10000003U
+    CONN_ACCEPT = 0x10000003U,
+    KEEP_ALIVE =  0x10000004U,
+    LIST_ROOMS =  0x10000005U,
+    LIST_ROOMS_RESP = 0x10000006U,
+    JOIN_ROOM = 0x10000007U,
+    LEAVE_ROOM = 0x10000008U,
+    SEND_MSG = 0x10000009U,
+    RELAY_MSG = 0x1000000AU
 };
 
+extern std::unordered_map<std::string, opcodes> cmd_map;
 extern std::unordered_map<std::string, uint32_t> opcode_map;
 extern std::unordered_map<uint32_t,std::string> opcode_map_server;
 
 constexpr uint32_t MAX_PAYLOAD_SIZE = 4096;
+constexpr size_t MAX_ROOMS = 100;
 
 #pragma pack(push, 1)
 struct irc_pkt_header {
@@ -57,5 +66,11 @@ struct irc_pkt_conn_accept {
     irc_pkt_header header;
     uint16_t userid;
 };
+
+struct irc_pkt_list_rooms_resp {
+	irc_pkt_header header;
+	char rooms[MAX_ROOMS][20];
+};
+
 
 #endif
