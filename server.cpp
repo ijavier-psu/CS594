@@ -151,7 +151,7 @@ void broadcast_packet(const irc_packet& packet, int sender_socket) {
     }
 }
 
-bool handle_packet(int sock, sqlite3* db,uint16_t userid){
+int handle_packet(int sock, sqlite3* db,uint16_t userid){
     irc_pkt_header header;
 
     if (!recv_all(sock,&header,sizeof(header))){
@@ -204,7 +204,9 @@ bool handle_packet(int sock, sqlite3* db,uint16_t userid){
 
             packet.userid = htons(userid);
 
-            return send_all(sock, &packet, sizeof(packet));
+            send_all(sock, &packet, sizeof(packet));
+
+            return userid;
             //packet.payload.assign(message.begin(),message.end());
 
             //if (!send_packet(sock, packet)) {
@@ -254,15 +256,21 @@ bool handle_packet(int sock, sqlite3* db,uint16_t userid){
             //read existing rooms
             std::vector<std::string> rooms = read_data(db);
             std::cout << "Rooms: "<<std::endl;
+            int room_found = 0;
             for (const auto& element : rooms) {
                 std::cout << element << " "<<std::endl;
-                //FIXME: if elemental == room, join
+                if (element == std::string(packet.room_name)){
+                    std::cout<<"Room exists!"<<std::endl;
+                    room_found = 1;
+                    break;
+                }
+            }
+            if(!room_found){
+                std::string sql = "INSERT INTO rooms (room_name) VALUES (\""+ std::string(packet.room_name) +"\");";
+                insert_data(db,sql);
             }
 
-            //FIXME: if name doesn't exist, create new room
-            std::string sql = "INSERT INTO rooms (room_name) VALUES (\""+ std::string(packet.room_name) +"\");";
-            insert_data(db,sql);
-
+            //add to foreign key link table
             std::string link = "INSERT INTO room_users (userid, room_name) VALUES ("+std::to_string(userid) +",\"" +packet.room_name +"\");";
             insert_data(db,link);
 
@@ -313,6 +321,9 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
     std::cout << "Connected: "
               << ip << ":" << port
               << std::endl;
+
+    
+    userid = (uint16_t)handle_packet(client_socket,db, userid);
 
     //Client connection loop
     while (true) {
