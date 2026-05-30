@@ -357,6 +357,7 @@ int main() {
 
         uint32_t opcode;
         //    opcode_map["CONN_INIT"];
+        std::string message = line.substr(pos + 1);
         
         //std::stoul(line.substr(0, pos));
         //FIXME: handle errors
@@ -373,10 +374,25 @@ int main() {
 
         switch (opcode){
             case LIST_ROOMS: {
-                std::cout<< "test"<<std::endl;
                 irc_pkt_list_rooms packet;
                 packet.header.opcode =  htonl(opcode);
                 packet.header.length = htonl(0);
+                send_all(sock, &packet, sizeof(packet));
+
+                break;
+            }
+            case JOIN_ROOM: {
+                //FIXME: Check all requirements
+                if ( message.length() > 20 ){
+                    std::cout<<"Maximum room name length: 20 characters"<<std::endl;
+                    break;
+                }
+
+                irc_pkt_join_room packet;
+                std::strncpy(packet.room_name, message.c_str(), sizeof(packet.room_name) - 1);
+                packet.header.opcode =  htonl(opcode);
+                packet.header.length = htonl(sizeof(packet.room_name));
+  
                 send_all(sock, &packet, sizeof(packet));
 
                 break;

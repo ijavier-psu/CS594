@@ -222,28 +222,6 @@ bool handle_packet(int sock, sqlite3* db,uint16_t userid){
             }
             std::cout << rooms.size() << " "<<std::endl;
             int num_rooms = rooms.size();
-            /*
-            uint32_t payload_len =
-            num_rooms * 20;
-
-            size_t total_size =
-            sizeof(irc_pkt_header)
-            + payload_len;
-
-            auto* buffer =
-            reinterpret_cast<uint8_t*>(
-                malloc(total_size));
-
-            auto* header =
-            reinterpret_cast<irc_pkt_header*>(
-            buffer);
-
-            header->opcode =
-            htonl(LIST_ROOMS_RESP);
-
-            header->length =
-            htonl(payload_len);
-            */
 
             irc_pkt_list_rooms_resp packet;
 
@@ -259,9 +237,34 @@ bool handle_packet(int sock, sqlite3* db,uint16_t userid){
                 //room_list[i] = rooms[i].c_str();
             }
 
-            std::cout<< packet.rooms << std::endl;
-
             return send_all(sock, &packet, sizeof(irc_pkt_header)+ num_rooms * 20);
+            break;
+        }
+
+        case JOIN_ROOM:
+        {
+            std::cout<<"Server received JOIN ROOM"<<std::endl;
+            irc_pkt_join_room packet;
+            if (!recv_all(sock, &packet.room_name, sizeof(packet.room_name))){
+                return false;
+            }
+
+            std::cout<<"room name: "<<packet.room_name <<std::endl;
+
+            //read existing rooms
+            std::vector<std::string> rooms = read_data(db);
+            std::cout << "Rooms: "<<std::endl;
+            for (const auto& element : rooms) {
+                std::cout << element << " "<<std::endl;
+                //FIXME: if elemental == room, join
+            }
+
+            //FIXME: if name doesn't exist, create new room
+            std::string sql = "INSERT INTO rooms (room_name) VALUES (\""+ std::string(packet.room_name) +"\");";
+            insert_data(db,sql);
+
+            std::string link = "INSERT INTO room_users (userid, room_name) VALUES ("+std::to_string(userid) +",\"" +packet.room_name +"\");";
+            insert_data(db,link);
 
             break;
         }

@@ -75,5 +75,9 @@ struct irc_pkt_list_rooms_resp {
 	char rooms[MAX_ROOMS][20];
 };
 
+struct irc_pkt_join_room {
+	irc_pkt_header header;
+	char room_name[20];
+};
 
 #endif

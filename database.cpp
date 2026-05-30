@@ -126,7 +126,7 @@ std::vector<std::string> read_data(sqlite3* db)
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW){
         std::string room_name = (const char*) sqlite3_column_text(stmt, 0);
 
-        std::cout << "Room Name: " << room_name<< std::endl;
+        //std::cout << "Room Name: " << room_name<< std::endl;
         rooms.push_back(room_name);
     }
 
