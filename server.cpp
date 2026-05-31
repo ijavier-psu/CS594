@@ -101,6 +101,17 @@ void broadcast_packet(const irc_packet& packet, int sender_socket) {
     }
 }
 
+void send_err(int sock,uint32_t err_code){
+    irc_pkt_err_msg err_packet;
+
+    err_packet.header.opcode = htonl(ERR);
+    err_packet.header.length = htonl(sizeof(uint32_t)+30);
+    err_packet.err_code = htonl(err_code);
+    strncpy(err_packet.msg,"User not subscribed to room",29);
+
+    send_all(sock, &err_packet, sizeof(err_packet));
+}
+
 int handle_packet(int sock, sqlite3* db,uint16_t userid,std::vector<std::string> &user_rooms){
     irc_pkt_header header;
 
@@ -116,10 +127,6 @@ int handle_packet(int sock, sqlite3* db,uint16_t userid,std::vector<std::string>
         case CONN_INIT:
         {
             std::cout << "SERVER recieved CONN INIT" << std::endl;
-            int recv_id;
-            auto now = std::chrono::system_clock::now();
-            auto duration = now.time_since_epoch();
-            auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
 
             std::string sql_str = "INSERT INTO users (socket) VALUES (" + std::to_string(sock) + ") RETURNING userid;";
 
@@ -173,6 +180,12 @@ int handle_packet(int sock, sqlite3* db,uint16_t userid,std::vector<std::string>
             }
 
             std::cout<<"room name: "<<packet.room_name <<std::endl;
+            //check if room name is already in user's room cache
+            auto it = std::find(user_rooms.begin(), user_rooms.end(), std::string(packet.room_name));
+            if (it != user_rooms.end()) {
+                std::cout<<"User already subscribed to "<<packet.room_name<<std::endl;
+                send_err(sock,0x20000004U);
+            }
 
             //read existing rooms
             std::vector<std::string> rooms = read_data(db);
@@ -266,8 +279,8 @@ int handle_packet(int sock, sqlite3* db,uint16_t userid,std::vector<std::string>
             if (it == user_rooms.end()){
                 //FIXME: send error code
                 std::cout<<"User not subscribed to room"<<std::endl;
-
-                irc_pkt_err_msg err_packet;
+                send_err(sock,0x20000004U);
+                /*irc_pkt_err_msg err_packet;
 
                 err_packet.header.opcode = htonl(ERR);
                 err_packet.header.length = htonl(sizeof(uint32_t)+30);
@@ -275,6 +288,7 @@ int handle_packet(int sock, sqlite3* db,uint16_t userid,std::vector<std::string>
                 strncpy(err_packet.msg,"User not subscribed to room",29);
 
                 send_all(sock, &err_packet, sizeof(err_packet));
+                */
             }
 
             
@@ -368,105 +382,16 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
         for (const auto& element : rooms) {
             std::cout << element << " "<<std::endl;
         }
-
-            //////FIXME DELETE
-        /*
-        irc_packet packet;
-
-        if (!recv_packet(client_socket,
-                         packet)) {
-            break;
-        }
-
-        std::cout << "Opcode="
-                  << packet.header.opcode
-                  << " Length="
-                  << packet.header.length
-                  << std::endl;
-
-        if (!packet.payload.empty()) {
-            std::string text(
-                packet.payload.begin(),
-                packet.payload.end()
-            );
-
-            std::cout << "Payload: "
-                      << text
-                      << std::endl;
-        }
-
-        //FIXME: HERE
-        //Switch on opcode
-
-        std::string op = opcode_map_server[packet.header.opcode];
-
-        switch(packet.header.opcode){
-            case CONN_INIT: {
-                std::cout << "CONN INIT" << std::endl;
-                auto now = std::chrono::system_clock::now();
-                auto duration = now.time_since_epoch();
-                auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
-
-                std::string sql_str = "INSERT INTO users (last_msg) VALUES (" + std::to_string(seconds) + ");";
-
-                insert_data(db,sql_str);
-
-                //FIXME: Test only, remove
-                read_data(db,56);
-
-                //Send client their client id
-                /*std::string message = line.substr(pos + 1);
-
-                irc_packet packet;
-
-                packet.header.opcode = opcode;
-                packet.header.length = message.size();
-
-                packet.payload.assign(message.begin(),message.end());
-
-                if (!send_packet(sock, packet)) {
-                    std::cout << "Send failed\n";
-                    break;
-                } */
-                /*
-                break;
-            }
-
-            default: {
-                std::cout << "Unrecognized opcode" << std::endl;
-                break;
-            }
-
-        }
-
-        broadcast_packet(packet,
-                         client_socket);
-        */
     }
 
     close(client_socket);
 
-    {
-        std::lock_guard<std::mutex> lock(
-            clients_mutex
-        );
-
-        clients.erase(
-            std::remove(clients.begin(),
-                        clients.end(),
-                        client_socket),
-            clients.end()
-        );
-    }
-
     //FIXME: need lock to persist through all transactions, move to database.cpp
     //delete user from database upon disconnect
-    //FIXME: get list of users rooms first
     std::string delete_user = "DELETE FROM users where userid = "+std::to_string(userid)+";";
     execute_sql(db,delete_user);
 
-    //FIXME: Check if any of the rooms now have 0 users, remove
-
+    //Check if any of the rooms now have 0 users, remove
     for (const auto& element : rooms) {
         if (!room_occ(db,element)){
             std::cout << element << " removed "<<std::endl;
@@ -475,7 +400,6 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
         }
         
     }
-
 
     std::cout << "Client disconnected\n";
 }

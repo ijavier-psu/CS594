@@ -88,7 +88,7 @@ uint16_t insert_user_data(sqlite3* db, std::string sql)
     std::lock_guard<std::mutex> lock(db_mutex);
 
     sqlite3_stmt* stmt;
-    sqlite3_int64 last_id;
+    sqlite3_int64 last_id = 0;
     //const char* sql = "INSERT INTO users (name) VALUES ('Bob') RETURNING id;";
 
     if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
