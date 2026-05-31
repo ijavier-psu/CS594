@@ -24,56 +24,6 @@ bool recv_all(int sock, void* buffer, size_t length) {
     return true;
 }
 
-bool recv_packet(int sock, irc_packet& packet) {
-    irc_pkt_header net_header;
-
-    uint8_t* ptr = reinterpret_cast<uint8_t*>(&net_header);
-    size_t length = sizeof(net_header);
-
-    while (length > 0) {
-        ssize_t bytes = recv(sock, ptr, length, 0);
-
-        if (bytes <= 0) {
-            return false;
-        }
-
-        ptr += bytes;
-        length -= bytes;
-    }
-
-    packet.header.opcode =
-        ntohl(net_header.opcode);
-
-    packet.header.length =
-        ntohl(net_header.length);
-
-    if (packet.header.length >
-        MAX_PAYLOAD_SIZE) {
-        return false;
-    }
-
-    packet.payload.resize(
-        packet.header.length
-    );
-
-    if (packet.header.length > 0) {
-        ptr = reinterpret_cast<uint8_t*>(packet.payload.data());
-        length = packet.payload.size();
-
-        while (length > 0) {
-            ssize_t bytes = recv(sock, ptr, length, 0);
-
-            if (bytes <= 0) {
-                return false;
-            }
-
-            ptr += bytes;
-            length -= bytes;
-        }
-    }
-
-    return true;
-}
 
 bool send_all(int sock, const void* buffer, size_t length) {
     const uint8_t* ptr = static_cast<const uint8_t*>(buffer);
@@ -171,33 +121,20 @@ int handle_packet(int sock, sqlite3* db,uint16_t userid,std::vector<std::string>
             auto duration = now.time_since_epoch();
             auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
 
-            std::string sql_str = "INSERT INTO users (last_msg) VALUES (" + std::to_string(seconds) + ") RETURNING userid;";
+            std::string sql_str = "INSERT INTO users (socket) VALUES (" + std::to_string(sock) + ") RETURNING userid;";
 
             //FIXME: handle errors
             uint16_t userid = insert_user_data(db,sql_str);
 
-            //FIXME: Read returned userid:
-            //uint16_t userid = 1011;
-
-            //Send client their client id
-            //std::string message = line.substr(pos + 1);
-
             irc_pkt_conn_accept packet;
-
             packet.header.opcode = htonl(CONN_ACCEPT);
             packet.header.length = htonl(sizeof(uint16_t));
-
             packet.userid = htons(userid);
 
             send_all(sock, &packet, sizeof(packet));
 
             return userid;
-            //packet.payload.assign(message.begin(),message.end());
 
-            //if (!send_packet(sock, packet)) {
-            //    std::cout << "Send failed\n";
-            //    break;
-            //} 
             break;
         }
         case LIST_ROOMS:
@@ -220,8 +157,7 @@ int handle_packet(int sock, sqlite3* db,uint16_t userid,std::vector<std::string>
             //char* room_list = new char[num_rooms *20];
             for(int i=0; i<num_rooms;i++){
                 strncpy(packet.rooms[i], rooms[i].c_str(),19);
-                std::cout<<"arr size: "<<sizeof(packet.rooms[i]) <<std::endl;
-                //room_list[i] = rooms[i].c_str();
+                //std::cout<<"arr size: "<<sizeof(packet.rooms[i]) <<std::endl;
             }
 
             return send_all(sock, &packet, sizeof(irc_pkt_header)+ num_rooms * 20);
@@ -260,13 +196,103 @@ int handle_packet(int sock, sqlite3* db,uint16_t userid,std::vector<std::string>
             insert_data(db,link);
 
             user_rooms.push_back(packet.room_name);
-                    std::cout<<"New room list1: "<<std::endl;
-            for (const auto& element : user_rooms) {
-                std::cout << element << " "<<std::endl;
+
+            //DEBUG std::cout<<"New room list1: "<<std::endl;
+            //for (const auto& element : user_rooms) {
+            //    std::cout << element << " "<<std::endl;
+            //}
+
+            break;
+        }
+
+        case LEAVE_ROOM:
+        {
+            std::cout<<"Server received LEAVE ROOM"<<std::endl;
+            irc_pkt_join_room packet;
+            if (!recv_all(sock, &packet.room_name, sizeof(packet.room_name))){
+                return false;
+            }
+
+            std::cout<<"room name: "<<packet.room_name <<std::endl;
+
+            //check if room name is in user's room cache
+            auto it = std::find(user_rooms.begin(), user_rooms.end(), std::string(packet.room_name));
+            if (it != user_rooms.end()) {
+                int index = std::distance(user_rooms.begin(), it);
+                std::cout << "Found key at index " << index << "\n";
+
+                //remove from database
+                //FIXME: need lock to persist through all transactions, move to database.cpp (check if room is empty)
+                std::string remove_room = "DELETE FROM room_users where userid = "+std::to_string(userid)+" AND room_name =\""+std::string(packet.room_name)+"\";";
+                execute_sql(db,remove_room);
+
+                user_rooms.erase(user_rooms.begin() + index);
+            } else {
+                std::cout << "Key not found\n";
+                //FIXME: return error
             }
 
             break;
         }
+
+        case SEND_MSG:
+        {
+            std::cout<<"Server received SEND_MSG"<<std::endl;
+            size_t msg_len = header.length - 20;
+
+            size_t packet_size = sizeof(irc_pkt_send_msg) + msg_len;
+
+            auto* packet =reinterpret_cast<irc_pkt_send_msg*>(malloc(packet_size));
+
+            packet->header = header;
+
+            //FIXME: error code
+            if (!recv_all(sock,packet->room_name,header.length)){
+                free(packet);
+                break;
+            }
+
+            std::string room_name(packet->room_name,strnlen(packet->room_name, 20));
+
+            std::string msg(packet->msg,msg_len);
+
+            std::cout
+                << "[" << room_name << "] "
+                << msg
+                << std::endl;
+
+            //check that user is not subscribed to room
+            auto it = std::find(user_rooms.begin(), user_rooms.end(), std::string(packet->room_name));
+            if (it == user_rooms.end()){
+                //FIXME: send error code
+                std::cout<<"User not subscribed to room"<<std::endl;
+
+                irc_pkt_err_msg err_packet;
+
+                err_packet.header.opcode = htonl(ERR);
+                err_packet.header.length = htonl(sizeof(uint32_t)+30);
+                err_packet.err_code = htonl(0x20000004U);
+                strncpy(err_packet.msg,"User not subscribed to room",29);
+
+                send_all(sock, &err_packet, sizeof(err_packet));
+            }
+
+            //prepare relay msg
+            //irc_pkt_relay_msg r_packet;
+
+            //relay packet
+            std::vector<int> socks = read_users(db,room_name);
+            std::cout << "sockets: "<<std::endl;
+            for (const auto& sock : socks) {
+                std::cout << sock << " "<<std::endl;
+            }
+            
+
+
+            free(packet);
+            break;
+        }
+
 
         default:
         {
@@ -426,6 +452,16 @@ void handle_client(int client_socket,sockaddr_in client_addr, sqlite3* db) {
     execute_sql(db,delete_user);
 
     //FIXME: Check if any of the rooms now have 0 users, remove
+
+    for (const auto& element : rooms) {
+        if (!room_occ(db,element)){
+            std::cout << element << " removed "<<std::endl;
+            std::string rm_room = "DELETE from rooms where room_name = \""+element+"\"";
+            execute_sql(db,rm_room);
+        }
+        
+    }
+
 
     std::cout << "Client disconnected\n";
 }

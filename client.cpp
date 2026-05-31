@@ -153,7 +153,7 @@ bool handle_packet(int sock)
     header.opcode = ntohl(header.opcode);
  
     header.length = ntohl(header.length);
-    std::cout<<"Length 1: "<<header.length<<std::endl;
+    //std::cout<<"Length 1: "<<header.length<<std::endl;
 
     switch (header.opcode){
         case CONN_ACCEPT:
@@ -302,6 +302,24 @@ bool init_connection(int sock) {
     //return true;
 }
 
+//FIXME add all req checks
+bool check_room_req(std::string str){
+    if ( str.length() > 20 ){
+        std::cout<<"Maximum room name length: 20 characters"<<std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+bool check_msg_req(std::string str){
+    if ( str.length() > 7999 ){
+        std::cout<<"Maximum message length: 7999 characters"<<std::endl;
+        return false;
+    }
+
+    return true;
+}
 
 int main() {
     int port = 1356;
@@ -348,16 +366,8 @@ int main() {
 
         size_t pos = line.find(' ');
 
-        if (pos == std::string::npos) {
-            std::cout
-                << "Format: "
-                << "<opcode> <message>\n";
-            continue;
-        }
-
         uint32_t opcode;
         //    opcode_map["CONN_INIT"];
-        std::string message = line.substr(pos + 1);
         
         //std::stoul(line.substr(0, pos));
         //FIXME: handle errors
@@ -383,8 +393,13 @@ int main() {
             }
             case JOIN_ROOM: {
                 //FIXME: Check all requirements
-                if ( message.length() > 20 ){
-                    std::cout<<"Maximum room name length: 20 characters"<<std::endl;
+                if (pos == std::string::npos) {
+                    std::cout<< "Format: " << "join_room room_name\n";
+                    continue;
+                }
+                std::string message = line.substr(pos + 1);
+
+                if (!check_room_req(message)){
                     break;
                 }
 
@@ -395,6 +410,77 @@ int main() {
   
                 send_all(sock, &packet, sizeof(packet));
 
+                break;
+            }
+            case LEAVE_ROOM: 
+            {
+                //FIXME: Check all requirements
+                if (pos == std::string::npos) {
+                    std::cout<< "Format: " << "join_room room_name\n";
+                    continue;
+                }
+                std::string message = line.substr(pos + 1);
+
+                if (!check_room_req(message)){
+                    break;
+                }
+
+                irc_pkt_join_room packet;
+                std::strncpy(packet.room_name, message.c_str(), sizeof(packet.room_name) - 1);
+                packet.header.opcode =  htonl(opcode);
+                packet.header.length = htonl(sizeof(packet.room_name));
+
+                send_all(sock, &packet, sizeof(packet));
+
+                break;
+            }
+            case SEND_MSG:
+            {
+                if (pos == std::string::npos) {
+                    std::cout<< "Format: " << "send_msg room_name [message to send]\n";
+                    continue;
+                }
+                std::string subs = line.substr(pos + 1);
+                size_t pos2 = subs.find(' ');
+
+                if (pos2 == std::string::npos) {
+                    std::cout<< "Format: " << "send_msg room_name [message to send]\n";
+                    continue;
+                }
+
+                std::string room_name = subs.substr(0,pos2);
+                std::string message = subs.substr(pos2+1);
+
+                if (!check_room_req(room_name)){
+                    break;
+                }
+
+                if (!check_msg_req(room_name)){
+                    break;
+                }
+
+                size_t msg_len = message.size();
+                size_t packet_size = sizeof(irc_pkt_send_msg) + msg_len;
+
+                irc_pkt_send_msg* packet = reinterpret_cast<irc_pkt_send_msg*>(malloc(packet_size));
+
+                std::cout<<"Room: "<<room_name<<std::endl;
+                std::cout<<"Message: "<<message<<std::endl;
+
+                //irc_pkt_send_msg packet;
+                packet->header.opcode =  htonl(opcode);
+                packet->header.length = htonl(static_cast<uint32_t>(sizeof(packet->room_name) + msg_len));
+
+                //std::strncpy(packet.room_name, room_name.c_str(), sizeof(packet.room_name) - 1);
+                memset(packet->room_name,0,sizeof(packet->room_name));
+                std::strncpy(packet->room_name,room_name.c_str(),sizeof(packet->room_name) - 1);
+
+                memcpy(packet->msg,message.data(),msg_len);
+
+                send_all(sock,packet,packet_size);
+                //send_all(sock, &packet, sizeof(packet));
+                
+                free(packet);
                 break;
             }
             default: {

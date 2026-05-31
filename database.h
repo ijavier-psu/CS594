@@ -18,16 +18,16 @@ extern std::mutex db_mutex;
 // Database helpers
 bool execute_sql(sqlite3* db, const std::string& sql);
 
-// Thread worker functions
 void insert_data(sqlite3* db, std::string sql);
-
 uint16_t insert_user_data(sqlite3* db, std::string sql);
-
+bool room_occ(sqlite3* db, std::string room_name);
+std::vector<int> read_users(sqlite3*db, std::string room_name);
 std::vector<std::string> read_data(sqlite3* db);
 
 int init_db(sqlite3* db);
 
 enum opcodes : uint32_t {
+    ERR = 0x10000001U,
     CONN_INIT =  0x10000002U,
     CONN_ACCEPT = 0x10000003U,
     KEEP_ALIVE =  0x10000004U,
@@ -75,9 +75,31 @@ struct irc_pkt_list_rooms_resp {
 	char rooms[MAX_ROOMS][20];
 };
 
+//also used for leave room
 struct irc_pkt_join_room {
 	irc_pkt_header header;
 	char room_name[20];
 };
+
+struct irc_pkt_send_msg {
+	irc_pkt_header header;
+	char room_name[20];
+	char msg[];
+};
+
+struct irc_pkt_relay_msg {
+	struct header;
+	char receiver[20];
+	uint16_t sender;
+	char msg[]; 
+};
+
+
+struct irc_pkt_err_msg {
+	irc_pkt_header header;
+	uint32_t err_code;
+	char msg[30];
+};
+
 
 #endif

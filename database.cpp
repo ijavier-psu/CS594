@@ -108,6 +108,30 @@ uint16_t insert_user_data(sqlite3* db, std::string sql)
     return userid;
 }
 
+std::vector<int> read_users(sqlite3*db, std::string room_name){
+    std::lock_guard<std::mutex> lock(db_mutex);
+
+    sqlite3_stmt* stmt;
+    std::vector<int> users;
+    std::string sql = "SELECT u.userid, u.socket FROM room_users ru JOIN users u ON ru.userid = u.userid WHERE ru.room_name = \""+room_name+"\";";
+
+    int rc = sqlite3_prepare_v2( db, sql.c_str(), -1, &stmt, nullptr);
+
+    if (rc != SQLITE_OK){
+        std::cerr << "Failed to prepare statement: "<< sqlite3_errmsg(db)<< std::endl;
+        return users;
+    }
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW){
+        int sock = sqlite3_column_int(stmt, 1);
+
+        users.push_back(sock);
+    }
+
+    sqlite3_finalize(stmt);
+    return users;
+}
+
 std::vector<std::string> read_data(sqlite3* db)
 {
     std::lock_guard<std::mutex> lock(db_mutex);
@@ -134,13 +158,34 @@ std::vector<std::string> read_data(sqlite3* db)
     return rooms;
 }
 
+//is room occupied by at least 1 user
+bool room_occ(sqlite3* db, std::string room_name)
+{
+    std::string sql ="SELECT EXISTS(SELECT 1 FROM room_users WHERE room_name = \""+room_name+"\");";
+
+    sqlite3_stmt* stmt = nullptr;
+
+    if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK)
+        return false;
+
+    bool exists = false;
+
+    if (sqlite3_step(stmt) == SQLITE_ROW){
+        exists = sqlite3_column_int(stmt, 0) != 0;
+    }
+
+    sqlite3_finalize(stmt);
+
+    return exists;
+}
+
 int init_db(sqlite3* db){
 
     execute_sql(db,"PRAGMA foreign_keys = ON;");
 
     std::string create_table_sql =
     "CREATE TABLE IF NOT EXISTS users ("
-    "userid INTEGER PRIMARY KEY AUTOINCREMENT, last_msg INTEGER"
+    "userid INTEGER PRIMARY KEY AUTOINCREMENT, socket INTEGER "
     ");";
 
     if (!execute_sql(db, create_table_sql))
