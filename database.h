@@ -88,7 +88,7 @@ struct irc_pkt_send_msg {
 };
 
 struct irc_pkt_relay_msg {
-	struct header;
+	irc_pkt_header header;
 	char receiver[20];
 	uint16_t sender;
 	char msg[]; 

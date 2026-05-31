@@ -201,6 +201,37 @@ bool handle_packet(int sock)
             }
             break;
         }
+        case RELAY_MSG:
+        {
+            std::cout<<"Client received RELAY_MSG"<<std::endl;
+            size_t msg_len = header.length - 20 - sizeof(uint16_t);
+
+            size_t packet_size = sizeof(irc_pkt_relay_msg) + msg_len;
+
+            auto* packet =reinterpret_cast<irc_pkt_relay_msg*>(malloc(packet_size));
+
+            packet->header = header;
+
+            //FIXME: error code
+            if (!recv_all(sock,packet->receiver,header.length)){
+                free(packet);
+                break;
+            }
+            packet->sender = ntohs(packet->sender);
+            std::string receiver(packet->receiver,strnlen(packet->receiver, 20));
+
+            std::string msg(packet->msg,msg_len);
+
+
+
+            std::cout
+                << "[" << receiver << "] "
+                << "From: u_" << std::to_string(packet->sender) <<" "
+                << msg
+                << std::endl;
+            free(packet);
+            break;
+        }
 
         default:
         {
@@ -227,59 +258,9 @@ bool handle_packet(int sock)
 
 void receive_thread(int sock) {
     while (true) {
-        
         if (!handle_packet(sock)){
             break; 
         }
-
-    /// FIXME DELETE
-        /*
-        irc_packet packet;
-
-        if (!recv_packet(sock, packet)) {
-            std::cout
-                << "\nDisconnected\n";
-
-            exit(0);
-        }
-
-        std::cout << "\nReceived packet\n";
-        std::cout << "Opcode: "
-                  << packet.header.opcode
-                  << "\n";
-
-        std::cout << "Length: "
-                  << packet.header.length
-                  << "\n";
-
-        if (!packet.payload.empty()) {
-            std::string text(
-                packet.payload.begin(),
-                packet.payload.end()
-            );
-
-            std::cout << "Payload: "
-                      << text
-                      << "\n";
-        
-
-            std::cout << "> ";
-            std::cout.flush();
-
-            switch(packet.header.opcode){
-                case CONN_ACCEPT: {
-                    userid = std::stoi(text);
-                    std::cout << "user id: "<< text << std::endl;
-                    break;
-                }
-
-                default: {
-                    std::cout << "Unrecognized opcode" << std::endl;
-                    break;
-                }
-
-            }
-        } */
     }
 }
 

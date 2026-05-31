@@ -277,17 +277,31 @@ int handle_packet(int sock, sqlite3* db,uint16_t userid,std::vector<std::string>
                 send_all(sock, &err_packet, sizeof(err_packet));
             }
 
-            //prepare relay msg
-            //irc_pkt_relay_msg r_packet;
+            
 
             //relay packet
             std::vector<int> socks = read_users(db,room_name);
-            std::cout << "sockets: "<<std::endl;
-            for (const auto& sock : socks) {
-                std::cout << sock << " "<<std::endl;
-            }
+            int num_socks = socks.size();
+            if (num_socks == 1) { std::cout<<"No users"<<std::endl; break; }
             
+            //prepare relay msg
+            //irc_pkt_relay_msg r_packet;
+            size_t r_packet_size = sizeof(irc_pkt_relay_msg) + msg_len;
+            irc_pkt_relay_msg* r_packet = reinterpret_cast<irc_pkt_relay_msg*>(malloc(r_packet_size));
 
+            r_packet->header.opcode = htonl(RELAY_MSG);
+            r_packet->header.length = htonl(20+ sizeof(uint16_t)+msg_len);
+
+            r_packet->sender = htonl(userid);
+            strncpy(r_packet->receiver,room_name.c_str(),19);
+            memcpy(r_packet->msg,msg.data(),msg_len);
+
+            std::cout << "sockets: "<<std::endl;
+            for (const auto& usock : socks) {
+                //if(usock == sock) { continue; }
+                std::cout << usock << " "<<std::endl;
+                send_all(usock,r_packet,r_packet_size);
+            }
 
             free(packet);
             break;
